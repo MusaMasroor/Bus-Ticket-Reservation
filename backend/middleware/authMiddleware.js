@@ -26,3 +26,22 @@ const authMiddleware = async (req, res, next) => {
 };
 
 export default authMiddleware;
+
+/**
+ * Optional auth — attaches req.user if a valid token is present, but never blocks.
+ * Used for endpoints that are public but benefit from knowing the caller's identity.
+ */
+export const optionalAuth = async (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+    if (user) req.user = user;
+  } catch {
+    // Silently ignore invalid / expired tokens for optional auth
+  }
+  next();
+};

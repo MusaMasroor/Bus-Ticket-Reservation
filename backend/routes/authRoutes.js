@@ -1,4 +1,11 @@
 import { Router } from 'express';
+import { registerHandler, loginHandler, getMe } from '../controllers/authController.js';
+import authMiddleware from '../middleware/authMiddleware.js';
+
 const router = Router();
-// Controllers wired in Task 5
+
+router.post('/register', registerHandler);
+router.post('/login',    loginHandler);
+router.get('/me',        authMiddleware, getMe);
+
 export default router;

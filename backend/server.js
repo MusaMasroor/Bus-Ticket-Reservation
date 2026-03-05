@@ -7,12 +7,12 @@ import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
-// Route imports (stubs — populated in Task 5)
 import authRoutes from './routes/authRoutes.js';
 import busRoutes from './routes/busRoutes.js';
 import routeRoutes from './routes/routeRoutes.js';
 import seatRoutes from './routes/seatRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,13 +46,13 @@ app.get('/health', (_req, res) => {
 });
 
 // ── API Routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
-app.use('/api/admin/buses', busRoutes);
-app.use('/api/admin/routes', routeRoutes);
-app.use('/api/admin', bookingRoutes);  // /api/admin/bookings + /api/admin/stats
-app.use('/api/routes', seatRoutes);    // /api/routes/:id/seats
-app.use('/api', bookingRoutes);        // /api/bookings/my, /api/bookings/:id/cancel
-app.use('/api', routeRoutes);          // /api/search
+app.use('/api/auth',          authRoutes);       // POST /register, /login  | GET /me
+app.use('/api/admin/buses',   busRoutes);        // admin CRUD for buses
+app.use('/api/admin/routes',  routeRoutes);      // admin CRUD for routes
+app.use('/api/admin',         adminRoutes);      // GET /bookings, /stats
+app.use('/api/routes',        seatRoutes);       // GET /:id/seats | POST /:id/seats/lock
+app.use('/api/bookings',      bookingRoutes);    // POST /  | GET /my | PUT /:id/cancel
+app.use('/api',               routeRoutes);      // GET /search
 
 // ── Error Handling ───────────────────────────────────────────────────────────
 app.use(notFound);
