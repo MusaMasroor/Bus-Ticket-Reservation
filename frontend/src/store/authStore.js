@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import api from '@/api/axios';
 
 const useAuthStore = create((set) => ({
   user:  JSON.parse(localStorage.getItem('busgo_user') || 'null'),
@@ -16,21 +17,23 @@ const useAuthStore = create((set) => ({
     set({ user: null, token: null });
   },
 
-  // Called on app mount to sync store from localStorage
-  initialize: () => {
+  // Called on app mount — verifies token with server and refreshes user data
+  initialize: async () => {
     const token = localStorage.getItem('busgo_token');
-    const userStr = localStorage.getItem('busgo_user');
-    if (token && userStr) {
-      try {
-        set({ token, user: JSON.parse(userStr) });
-      } catch {
-        localStorage.removeItem('busgo_token');
-        localStorage.removeItem('busgo_user');
+    if (!token) return;
+    try {
+      const { data } = await api.get('/auth/me');
+      if (data.success) {
+        localStorage.setItem('busgo_user', JSON.stringify(data.data));
+        set({ token, user: data.data });
       }
+    } catch {
+      localStorage.removeItem('busgo_token');
+      localStorage.removeItem('busgo_user');
+      set({ user: null, token: null });
     }
   },
 
-  // Used by Task 7 to update user profile after /auth/me fetch
   setUser: (user) => {
     localStorage.setItem('busgo_user', JSON.stringify(user));
     set({ user });
