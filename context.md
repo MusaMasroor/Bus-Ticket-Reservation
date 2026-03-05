@@ -18,8 +18,7 @@ bus-ticket-reservation-system/               ← monorepo root
 │   ├── .env.example                         ← template with all required keys
 │   ├── server.js                            ← entry point: Express app bootstrap
 │   ├── config/
-│   │   ├── db.js                            ← Mongoose connection with retry logic
-│   │   └── mailer.js                        ← Nodemailer transporter setup
+│   │   └── db.js                            ← Mongoose connection with retry logic
 │   ├── models/
 │   │   ├── User.js                          ← User schema
 │   │   ├── Bus.js                           ← Bus schema
@@ -44,7 +43,6 @@ bus-ticket-reservation-system/               ← monorepo root
 │   │   ├── seatRoutes.js
 │   │   └── bookingRoutes.js
 │   └── utils/
-│       ├── emailTemplates.js                ← HTML email templates
 │       ├── generateToken.js                 ← JWT sign helper
 │       └── seatPricing.js                   ← window seat premium logic
 │
@@ -119,9 +117,9 @@ Base URL: `http://localhost:5000/api`
 | GET    | `/search`                     | None          | Search routes by `source`, `destination`, `date`; filters: `type`, `minPrice`, `maxPrice`, `departureAfter`, `departureBefore`; sort: `price_asc`, `price_desc`, `departure_asc` |
 | GET    | `/routes/:id/seats`           | None          | Return seat layout + availability; auto-expire locks where `lockedUntil < now`      |
 | POST   | `/routes/:id/seats/lock`      | JWT           | Lock selected seats for current user for 10 minutes                                 |
-| POST   | `/bookings`                   | JWT           | Validate seat availability, create booking, send confirmation email                 |
+| POST   | `/bookings`                   | JWT           | Validate seat availability, create booking                                          |
 | GET    | `/bookings/my`                | JWT           | Return paginated list of current user's bookings                                    |
-| PUT    | `/bookings/:id/cancel`        | JWT           | Cancel booking if status=confirmed and departure hasn't passed; send cancel email   |
+| PUT    | `/bookings/:id/cancel`        | JWT           | Cancel booking if status=confirmed and departure hasn't passed                      |
 
 ### Admin APIs — `/api/admin` (JWT + Admin role required on all)
 
@@ -281,7 +279,6 @@ Manages the in-progress booking flow across pages.
 | `express-rate-limit`  | ^7.x     | Rate limiting to prevent brute-force/DoS                      |
 | `bcryptjs`            | ^2.x     | Password hashing (bcrypt algorithm)                           |
 | `jsonwebtoken`        | ^9.x     | JWT generation and verification                               |
-| `nodemailer`          | ^6.x     | SMTP email sending (booking confirmations, cancellations)     |
 | `express-validator`   | ^7.x     | Request body/query input validation                           |
 
 ### Frontend
@@ -319,14 +316,6 @@ MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/bus-reservation
 # JWT
 JWT_SECRET=your_super_secret_jwt_key_min_32_chars
 JWT_EXPIRES_IN=7d
-
-# SMTP / Email (Gmail example)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_app_password
-EMAIL_FROM=Bus Reservation <your_email@gmail.com>
 
 # Frontend URL (for CORS)
 CLIENT_URL=http://localhost:5173

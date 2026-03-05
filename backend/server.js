@@ -5,7 +5,6 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
 import connectDB from './config/db.js';
-import { verifyMailer } from './config/mailer.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 // Route imports (stubs — populated in Task 5)
@@ -62,7 +61,6 @@ app.use(errorHandler);
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 const start = async () => {
   await connectDB();
-  await verifyMailer();
   app.listen(PORT, () => {
     console.log(`\n🚌 Bus Reservation API running on http://localhost:${PORT}`);
     console.log(`   Environment : ${process.env.NODE_ENV || 'development'}`);
