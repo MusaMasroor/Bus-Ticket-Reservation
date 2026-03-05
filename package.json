@@ -1,0 +1,20 @@
+{
+  "name": "bus-ticket-reservation-system",
+  "version": "1.0.0",
+  "description": "A full-stack MERN Bus Ticket Reservation System",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix backend start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
