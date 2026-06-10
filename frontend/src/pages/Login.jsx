@@ -32,7 +32,9 @@ export default function Login() {
       const { data } = await api.post('/auth/login', form);
       if (data.success) {
         login(data.data);
-        navigate(from, { replace: true });
+        // Admins who land on the login page directly (from === '/') go to the admin panel
+        const destination = from === '/' && data.data.user?.role === 'admin' ? '/admin' : from;
+        navigate(destination, { replace: true });
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');

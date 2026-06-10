@@ -10,6 +10,8 @@ const connectDB = async () => {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       serverSelectionTimeoutMS: 10000, // 10s to find a server
       socketTimeoutMS: 45000,
+      maxPoolSize: 10,                 // connection pool for concurrent requests
+      retryWrites: true,               // auto-retry transient write failures
     });
 
     retryCount = 0; // reset on success

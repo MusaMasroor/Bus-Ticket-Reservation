@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { BookOpen, ChevronRight, Download } from 'lucide-react';
+import { BookOpen, ChevronRight, Download, FileSpreadsheet } from 'lucide-react';
 
 import { Button }   from '@/components/ui/button';
 import { Input }    from '@/components/ui/input';
@@ -14,14 +14,15 @@ import api from '@/api/axios';
 import useAuthStore from '@/store/authStore';
 import { formatDate, formatDateTime, formatCurrency } from '@/utils/formatters';
 import { generateTicket } from '@/utils/generateTicket';
+import { exportCsv } from '@/utils/exportCsv';
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }) {
   const map = {
-    confirmed: 'bg-green-100 text-green-700',
-    cancelled: 'bg-red-100 text-red-700',
-    pending:   'bg-yellow-100 text-yellow-700',
+    confirmed: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+    cancelled: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+    pending:   'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium ${map[status] ?? map.pending}`}>
@@ -86,9 +87,35 @@ export default function AdminBookings() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold">All Bookings</h2>
-        <p className="text-muted-foreground text-sm">{pagination.total} total bookings</p>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-2xl font-bold">All Bookings</h2>
+          <p className="text-muted-foreground text-sm">{pagination.total} total bookings</p>
+        </div>
+        {bookings.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => {
+              const headers = ['Booking ID', 'Passenger', 'Email', 'Route', 'Date', 'Seats', 'Amount', 'Status', 'Booked At'];
+              const rows = bookings.map((b) => [
+                b._id,
+                b.userId?.name ?? '',
+                b.userId?.email ?? '',
+                `${b.routeId?.source ?? ''} → ${b.routeId?.destination ?? ''}`,
+                b.routeId?.date ?? '',
+                (b.seatNumbers ?? []).join(', '),
+                b.totalAmount,
+                b.status,
+                b.createdAt ? new Date(b.createdAt).toLocaleString() : '',
+              ]);
+              exportCsv('BusGo-Bookings.csv', headers, rows);
+            }}
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Export CSV
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -218,7 +245,7 @@ export default function AdminBookings() {
                         size="sm"
                         variant="outline"
                         className="h-7 px-2 gap-1"
-                        onClick={() => generateTicket(booking, booking.userId ?? user)}
+                        onClick={async () => generateTicket(booking, booking.userId ?? user)}
                       >
                         <Download className="w-3.5 h-3.5" />
                       </Button>

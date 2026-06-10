@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Bus, MapPin, ChevronRight, Clock, Loader2, AlertCircle } from 'lucide-react';
+import { Bus, MapPin, ChevronRight, Clock, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 import { Button }   from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -115,7 +115,7 @@ function BusGrid({ seats, selectedSeats, onToggle }) {
             </div>
           ))}
           <div className="flex items-center gap-1.5 text-xs">
-            <div className="w-4 h-4 rounded border bg-amber-50 border-amber-200" />
+            <div className="w-4 h-4 rounded border bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700" />
             <span className="text-muted-foreground">Window (+10%)</span>
           </div>
         </div>
@@ -129,46 +129,89 @@ function BusGrid({ seats, selectedSeats, onToggle }) {
 export default function SeatSelection() {
   const { id }     = useParams();
   const navigate   = useNavigate();
-  const setRoute   = useBookingStore((s) => s.setRoute);
-  const toggleSeat = useBookingStore((s) => s.toggleSeat);
-  const selectedSeats = useBookingStore((s) => s.selectedSeats);
-  const totalPrice    = useBookingStore((s) => s.totalPrice);
+  const setRoute       = useBookingStore((s) => s.setRoute);
+  const toggleSeat     = useBookingStore((s) => s.toggleSeat);
+  const setLockExpiry  = useBookingStore((s) => s.setLockExpiry);
+  const selectedSeats  = useBookingStore((s) => s.selectedSeats);
+  const totalPrice     = useBookingStore((s) => s.totalPrice);
 
   const [routeData, setRouteData] = useState(null);
   const [seats,     setSeats]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState('');
-  const [locking,   setLocking]   = useState(false);
-  const [lockError, setLockError] = useState('');
+  const [locking,     setLocking]     = useState(false);
+  const [lockError,   setLockError]   = useState('');
+  const [lockWarning, setLockWarning] = useState('');
 
-  useEffect(() => {
-    const fetchSeats = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const { data } = await api.get(`/routes/${id}/seats`);
-        if (data.success) {
+  const [seatChange, setSeatChange] = useState('');
+
+  const fetchSeatData = useCallback(async (isInitial = false) => {
+    if (isInitial) { setLoading(true); setError(''); }
+    try {
+      const { data } = await api.get(`/routes/${id}/seats`);
+      if (data.success) {
+        if (isInitial) {
           setRouteData(data.data.route);
-          setSeats(data.data.seats);
           setRoute(data.data.route);
         }
-      } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load seat layout.');
-      } finally {
-        setLoading(false);
+        setSeats(data.data.seats);
+        return data.data.seats;
       }
-    };
-    fetchSeats();
+    } catch (err) {
+      if (isInitial) setError(err.response?.data?.message || 'Failed to load seat layout.');
+    } finally {
+      if (isInitial) setLoading(false);
+    }
+    return null;
   }, [id, setRoute]);
+
+  // Initial fetch
+  useEffect(() => { fetchSeatData(true); }, [fetchSeatData]);
+
+  // Poll every 15 seconds for real-time seat updates
+  useEffect(() => {
+    if (loading || error) return;
+
+    const interval = setInterval(async () => {
+      const freshSeats = await fetchSeatData(false);
+      if (!freshSeats) return;
+
+      // Check if any selected seats were taken by someone else
+      const { selectedSeats: current, toggleSeat: toggle } = useBookingStore.getState();
+      const unavailable = current.filter((sel) => {
+        const fresh = freshSeats.find((s) => s.seatNumber === sel.seatNumber);
+        return fresh && (fresh.status === 'booked' || fresh.status === 'locked');
+      });
+      if (unavailable.length > 0) {
+        unavailable.forEach((s) => toggle(s));
+        setSeatChange(`Seat${unavailable.length > 1 ? 's' : ''} ${unavailable.map((s) => s.seatNumber).join(', ')} became unavailable`);
+        setTimeout(() => setSeatChange(''), 4000);
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [loading, error, fetchSeatData]);
 
   const handleProceed = async () => {
     if (selectedSeats.length === 0) return;
     setLocking(true);
     setLockError('');
+    setLockWarning('');
     try {
-      await api.post(`/routes/${id}/seats/lock`, {
-        seatNumbers: selectedSeats.map((s) => s.seatNumber),
+      const requested = selectedSeats.map((s) => s.seatNumber).sort();
+      const { data } = await api.post(`/routes/${id}/seats/lock`, {
+        seatNumbers: requested,
       });
+      const locked = (data.data?.seatNumbers ?? []).slice().sort();
+      const sameSelection =
+        locked.length === requested.length &&
+        locked.every((s, i) => s === requested[i]);
+      if (!sameSelection) {
+        setLockWarning('Your previous seat selection in another tab has been replaced.');
+      }
+      if (data.data?.lockedUntil) {
+        setLockExpiry(data.data.lockedUntil);
+      }
       navigate('/checkout');
     } catch (err) {
       setLockError(err.response?.data?.message || 'Failed to lock seats. Please try again.');
@@ -293,9 +336,22 @@ export default function SeatSelection() {
                 </>
               )}
 
+              {lockWarning && (
+                <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  {lockWarning}
+                </div>
+              )}
+
               {lockError && (
                 <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
                   {lockError}
+                </div>
+              )}
+
+              {seatChange && (
+                <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 px-3 py-2 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-1.5 animate-fade-in">
+                  <RefreshCw className="w-3 h-3 shrink-0" />
+                  {seatChange}
                 </div>
               )}
 

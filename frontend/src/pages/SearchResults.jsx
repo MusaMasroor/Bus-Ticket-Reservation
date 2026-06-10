@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  Bus, MapPin, Clock, Users, SlidersHorizontal, ArrowUpDown, ChevronRight,
+  Bus, MapPin, Clock, Users, SlidersHorizontal, ArrowUpDown, ChevronRight, Sparkles,
 } from 'lucide-react';
 
 import { Button }   from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Label }    from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 
 import api from '@/api/axios';
 import { formatTime, formatCurrency, formatDuration } from '@/utils/formatters';
@@ -41,7 +42,7 @@ function RouteCardSkeleton() {
 
 // ── Route card ────────────────────────────────────────────────────────────────
 
-function RouteCard({ route }) {
+function RouteCard({ route, isRecommended }) {
   const navigate = useNavigate();
 
   const busTypeColor = {
@@ -63,6 +64,11 @@ function RouteCard({ route }) {
               <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${busTypeColor[route.busId?.type] ?? busTypeColor['Non-AC']}`}>
                 {route.busId?.type}
               </span>
+              {isRecommended && (
+                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 gap-1">
+                  <Sparkles className="w-3 h-3" />Recommended
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-1 text-sm text-muted-foreground">
               <MapPin className="w-3.5 h-3.5 shrink-0" />
@@ -194,6 +200,7 @@ export default function SearchResults() {
   const [sort,        setSort]        = useState('departure_asc');
   const [filters,     setFilters]     = useState({ busType: 'All', minPrice: '', maxPrice: '' });
   const [showFilters, setShowFilters] = useState(false);
+  const [recommendedIds, setRecommendedIds] = useState(new Set());
 
   const mergeFilters = (partial) => setFilters((prev) => ({ ...prev, ...partial }));
 
@@ -206,27 +213,36 @@ export default function SearchResults() {
       if (destination) params.set('destination', destination);
       if (date)        params.set('date', date);
       params.set('sort', sort);
+      if (filters.busType !== 'All') params.set('type', filters.busType);
+      if (filters.minPrice)          params.set('minPrice', filters.minPrice);
+      if (filters.maxPrice)          params.set('maxPrice', filters.maxPrice);
 
       const { data } = await api.get(`/search?${params.toString()}`);
       setRoutes(data.success ? data.data : []);
-    } catch {
-      setError('Failed to load routes. Please try again.');
+    } catch (err) {
+      const msg = err.response?.data?.message;
+      setError(msg || 'Failed to load routes. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [source, destination, date, sort]);
+  }, [source, destination, date, sort, filters.busType, filters.minPrice, filters.maxPrice]);
 
   useEffect(() => {
     fetchRoutes();
   }, [fetchRoutes]);
 
-  // Client-side filter application
-  const filtered = routes.filter((r) => {
-    if (filters.busType !== 'All' && r.busId?.type !== filters.busType) return false;
-    if (filters.minPrice && r.basePrice < Number(filters.minPrice)) return false;
-    if (filters.maxPrice && r.basePrice > Number(filters.maxPrice)) return false;
-    return true;
-  });
+  // Fetch recommended route IDs once to show badge on matching search results
+  useEffect(() => {
+    api.get('/recommendations')
+      .then(({ data }) => {
+        if (data.success) {
+          setRecommendedIds(new Set(data.data.recommendations.map((r) => r.route._id)));
+        }
+      })
+      .catch(() => {}); // silently ignore — badge is optional
+  }, []);
+
+  const filtered = routes;
 
   return (
     <div className="container py-8 max-w-6xl mx-auto px-4">
@@ -305,7 +321,7 @@ export default function SearchResults() {
                 </p>
               </div>
             ) : (
-              filtered.map((route) => <RouteCard key={route._id} route={route} />)
+              filtered.map((route) => <RouteCard key={route._id} route={route} isRecommended={recommendedIds.has(route._id)} />)
             )}
           </div>
         </div>

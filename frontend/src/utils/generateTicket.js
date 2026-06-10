@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 import { formatDate, formatTime, formatCurrency, formatDateTime } from './formatters';
 
 /**
@@ -7,7 +8,7 @@ import { formatDate, formatTime, formatCurrency, formatDateTime } from './format
  * @param {object} booking  — populated booking object from API
  * @param {object} user     — { name, email } from authStore
  */
-export function generateTicket(booking, user) {
+export async function generateTicket(booking, user) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const route = booking.routeId;
@@ -169,6 +170,45 @@ export function generateTicket(booking, user) {
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...PRIMARY);
   doc.text(formatCurrency(booking.totalAmount), 194, totalY + 6, { align: 'right' });
+
+  // ── QR Code ──────────────────────────────────────────────────────────────
+  const qrPayload = JSON.stringify({
+    bookingId: booking._id,
+    passenger: user?.name,
+    route: `${route?.source} → ${route?.destination}`,
+    date: route?.date,
+    seats: booking.seatNumbers,
+    status: booking.status,
+  });
+
+  try {
+    const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+      width: 200,
+      margin: 1,
+      color: { dark: '#1e1b4b', light: '#ffffff' },
+    });
+
+    const qrY = totalY + 14;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...PRIMARY);
+    doc.text('SCAN TO VERIFY', 14, qrY);
+    doc.setDrawColor(...PRIMARY);
+    doc.line(14, qrY + 2, 196, qrY + 2);
+
+    doc.addImage(qrDataUrl, 'PNG', 14, qrY + 6, 38, 38);
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...GRAY);
+    doc.text('Scan this QR code to verify', 58, qrY + 18);
+    doc.text('your booking details.', 58, qrY + 24);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...DARK);
+    doc.text(`Ref: ${booking._id?.toString().slice(-12).toUpperCase()}`, 58, qrY + 34);
+  } catch {
+    // QR generation failed — skip silently, rest of ticket is still valid
+  }
 
   // ── Footer ─────────────────────────────────────────────────────────────────
   doc.setFillColor(...PRIMARY);

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
 
+import ErrorBoundary   from '@/components/ErrorBoundary';
 import Navbar          from '@/components/layout/Navbar';
 import Footer          from '@/components/layout/Footer';
 import ProtectedRoute  from '@/components/layout/ProtectedRoute';
@@ -31,6 +32,7 @@ export default function App() {
   }, [initialize]);
 
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <div className="min-h-screen flex flex-col">
         <Navbar />
@@ -67,5 +69,6 @@ export default function App() {
         <Footer />
       </div>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }

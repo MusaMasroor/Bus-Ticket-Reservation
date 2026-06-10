@@ -13,6 +13,7 @@ import routeRoutes from './routes/routeRoutes.js';
 import seatRoutes from './routes/seatRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import recommendationRoutes from './routes/recommendationRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,9 +37,40 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Stricter rate limiter for auth endpoints (brute-force protection)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,          // 15-minute window
+  max: 10,                            // max 10 login/register attempts per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts. Please try again after 15 minutes.' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+
 // ── Body Parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// ── NoSQL Injection Sanitization ────────────────────────────────────────────
+// Strips keys starting with $ or containing . from req.body, req.query, req.params
+const sanitize = (obj) => {
+  if (typeof obj !== 'object' || obj === null) return obj;
+  for (const key of Object.keys(obj)) {
+    if (key.startsWith('$') || key.includes('.')) {
+      delete obj[key];
+    } else if (typeof obj[key] === 'object') {
+      sanitize(obj[key]);
+    }
+  }
+  return obj;
+};
+app.use((req, _res, next) => {
+  if (req.body)   sanitize(req.body);
+  if (req.query)  sanitize(req.query);
+  if (req.params) sanitize(req.params);
+  next();
+});
 
 // ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
@@ -52,6 +84,7 @@ app.use('/api/admin/routes',  routeRoutes);      // admin CRUD for routes
 app.use('/api/admin',         adminRoutes);      // GET /bookings, /stats
 app.use('/api/routes',        seatRoutes);       // GET /:id/seats | POST /:id/seats/lock
 app.use('/api/bookings',      bookingRoutes);    // POST /  | GET /my | PUT /:id/cancel
+app.use('/api/recommendations', recommendationRoutes); // GET / (optionalAuth)
 app.use('/api',               routeRoutes);      // GET /search
 
 // ── Error Handling ───────────────────────────────────────────────────────────

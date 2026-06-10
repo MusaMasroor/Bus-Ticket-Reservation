@@ -1,4 +1,5 @@
 import { body } from 'express-validator';
+import mongoose from 'mongoose';
 import Route from '../models/Route.js';
 import Booking from '../models/Booking.js';
 import SeatLock from '../models/SeatLock.js';
@@ -80,44 +81,55 @@ export const lockRules = [
 ];
 
 export const lockSeats = async (req, res, next) => {
+  const session = await mongoose.startSession();
   try {
     const { seatNumbers } = req.body;
     const routeId = req.params.id;
     const userId = req.user._id;
 
+    // Read-only validations (outside transaction)
     const route = await Route.findById(routeId).populate('busId', 'seatLayout').lean();
     if (!route) return res.status(404).json({ success: false, message: 'Route not found.' });
     if (route.status === 'cancelled') {
       return res.status(400).json({ success: false, message: 'This route has been cancelled.' });
     }
 
-    // Validate all requested seats exist in the bus layout
+    // Block locking seats on departed routes
+    if (new Date(route.departureTime) <= new Date()) {
+      return res.status(400).json({ success: false, message: 'Cannot lock seats on a route that has already departed.' });
+    }
+
     const validSeatNumbers = new Set(route.busId.seatLayout.seats.map((s) => s.seatNumber));
     const invalidSeats = seatNumbers.filter((s) => !validSeatNumbers.has(s));
     if (invalidSeats.length > 0) {
       return res.status(400).json({ success: false, message: `Invalid seats: ${invalidSeats.join(', ')}` });
     }
 
+    // ── Begin atomic transaction for lock check + lock creation ──
+    session.startTransaction();
+
     // Check no requested seat is already confirmed-booked
     const existingBooking = await Booking.findOne({
       routeId,
       seatNumbers: { $in: seatNumbers },
       status: 'confirmed',
-    });
+    }).session(session);
     if (existingBooking) {
+      await session.abortTransaction();
       return res.status(409).json({ success: false, message: 'One or more seats are already booked.' });
     }
 
-    // Auto-expire stale locks first
-    await SeatLock.deleteMany({ routeId, lockedUntil: { $lt: new Date() } });
+    // Auto-expire stale locks
+    await SeatLock.deleteMany({ routeId, lockedUntil: { $lt: new Date() } }).session(session);
 
     // Check no requested seat is locked by another user
     const othersLocks = await SeatLock.find({
       routeId,
       seatNumber: { $in: seatNumbers },
       lockedBy: { $ne: userId },
-    });
+    }).session(session);
     if (othersLocks.length > 0) {
+      await session.abortTransaction();
       const takenSeats = othersLocks.map((l) => l.seatNumber).join(', ');
       return res.status(409).json({
         success: false,
@@ -127,12 +139,14 @@ export const lockSeats = async (req, res, next) => {
 
     const lockedUntil = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Upsert a lock for each seat (replace any existing lock this user holds)
-    await SeatLock.deleteMany({ routeId, lockedBy: userId }); // clear old locks for this user on this route
-
+    // Clear old locks for this user on this route, then create new ones
+    await SeatLock.deleteMany({ routeId, lockedBy: userId }).session(session);
     await SeatLock.insertMany(
-      seatNumbers.map((seatNumber) => ({ routeId, seatNumber, lockedBy: userId, lockedUntil }))
+      seatNumbers.map((seatNumber) => ({ routeId, seatNumber, lockedBy: userId, lockedUntil })),
+      { session }
     );
+
+    await session.commitTransaction();
 
     res.json({
       success: true,
@@ -140,7 +154,10 @@ export const lockSeats = async (req, res, next) => {
       data: { lockedUntil, seatNumbers },
     });
   } catch (err) {
+    if (session.inTransaction()) await session.abortTransaction();
     next(err);
+  } finally {
+    session.endSession();
   }
 };
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Loader2, AlertCircle, MapPin, PlusCircle, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, AlertCircle, MapPin, PlusCircle, X, FileSpreadsheet } from 'lucide-react';
 
 import { Button }   from '@/components/ui/button';
 import { Input }    from '@/components/ui/input';
@@ -16,6 +16,7 @@ import {
 
 import api from '@/api/axios';
 import { formatDate, formatTime, formatCurrency } from '@/utils/formatters';
+import { exportCsv } from '@/utils/exportCsv';
 
 // ── Pagination ────────────────────────────────────────────────────────────────
 
@@ -413,9 +414,34 @@ export default function AdminRoutes() {
           <h2 className="text-2xl font-bold">Manage Routes</h2>
           <p className="text-muted-foreground text-sm">{pagination.total} routes total</p>
         </div>
-        <Button className="gap-2" onClick={() => setFormTarget('new')}>
-          <Plus className="w-4 h-4" /> Add Route
-        </Button>
+        <div className="flex items-center gap-2">
+          {routes.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => {
+                const headers = ['Route', 'Bus', 'Date', 'Departure', 'Arrival', 'Base Price', 'Seats', 'Status'];
+                const rows = routes.map((r) => [
+                  `${r.source} → ${r.destination}`,
+                  r.busId?.name ?? '',
+                  r.date ?? '',
+                  r.departureTime ? new Date(r.departureTime).toLocaleTimeString() : '',
+                  r.arrivalTime ? new Date(r.arrivalTime).toLocaleTimeString() : '',
+                  r.basePrice,
+                  r.totalSeats,
+                  r.status,
+                ]);
+                exportCsv('BusGo-Routes.csv', headers, rows);
+              }}
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Export CSV
+            </Button>
+          )}
+          <Button className="gap-2" onClick={() => setFormTarget('new')}>
+            <Plus className="w-4 h-4" /> Add Route
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -497,8 +523,8 @@ export default function AdminRoutes() {
                   <TableCell>
                     <Badge
                       className={route.status === 'active'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                       }
                     >
                       {route.status}

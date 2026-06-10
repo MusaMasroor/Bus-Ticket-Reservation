@@ -5,16 +5,17 @@ import {
   CheckCircle2, Download, LayoutDashboard, Loader2, AlertCircle,
 } from 'lucide-react';
 
-import { Button }   from '@/components/ui/button';
-import { Input }    from '@/components/ui/input';
-import { Label }    from '@/components/ui/label';
-import { Badge }    from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-import api              from '@/api/axios';
-import useAuthStore     from '@/store/authStore';
-import useBookingStore  from '@/store/bookingStore';
+import api from '@/api/axios';
+import useAuthStore from '@/store/authStore';
+import useBookingStore from '@/store/bookingStore';
+import CountdownTimer from '@/components/CountdownTimer';
 import { formatTime, formatDate, formatCurrency } from '@/utils/formatters';
 import { generateTicket } from '@/utils/generateTicket';
 
@@ -30,7 +31,7 @@ const formatExpiry = (v) => {
 
 // ── Booking summary sidebar ────────────────────────────────────────────────────
 
-function BookingSummary({ route, selectedSeats, totalPrice }) {
+function BookingSummary({ route, selectedSeats, totalPrice, lockExpiresAt, onLockExpire }) {
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -82,10 +83,7 @@ function BookingSummary({ route, selectedSeats, totalPrice }) {
           <p className="text-xs text-muted-foreground mt-0.5">Window seat premium included</p>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded p-2">
-          <Lock className="w-3 h-3 shrink-0" />
-          Seats locked · expires in ~10 min
-        </div>
+        <CountdownTimer expiresAt={lockExpiresAt} onExpire={onLockExpire} />
       </CardContent>
     </Card>
   );
@@ -105,7 +103,7 @@ function ConfirmationDialog({ open, booking, user, onClose, onDashboard }) {
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm space-y-1.5">
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-sm space-y-1.5">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Booking ID</span>
               <span className="font-mono font-medium text-xs">{booking?._id?.slice(-12).toUpperCase()}</span>
@@ -130,7 +128,7 @@ function ConfirmationDialog({ open, booking, user, onClose, onDashboard }) {
             <Button
               variant="outline"
               className="flex-1 gap-2"
-              onClick={() => generateTicket(booking, user)}
+              onClick={async () => generateTicket(booking, user)}
             >
               <Download className="w-4 h-4" /> Download Ticket
             </Button>
@@ -147,15 +145,21 @@ function ConfirmationDialog({ open, booking, user, onClose, onDashboard }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Checkout() {
-  const navigate      = useNavigate();
-  const user          = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const selectedRoute = useBookingStore((s) => s.selectedRoute);
   const selectedSeats = useBookingStore((s) => s.selectedSeats);
-  const totalPrice    = useBookingStore((s) => s.totalPrice);
-  const clearBooking  = useBookingStore((s) => s.clearBooking);
+  const totalPrice = useBookingStore((s) => s.totalPrice);
+  const lockExpiresAt = useBookingStore((s) => s.lockExpiresAt);
+  const clearBooking = useBookingStore((s) => s.clearBooking);
+
+  const handleLockExpire = () => {
+    clearBooking();
+    navigate('/', { replace: true });
+  };
 
   const [payment, setPayment] = useState({ cardNumber: '', expiry: '', cvv: '', name: '' });
-  const [errors,  setErrors]  = useState({});
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState('');
   const [confirmedBooking, setConfirmedBooking] = useState(null);
@@ -174,18 +178,18 @@ export default function Checkout() {
     const { name, value } = e.target;
     let formatted = value;
     if (name === 'cardNumber') formatted = formatCardNumber(value);
-    if (name === 'expiry')     formatted = formatExpiry(value);
-    if (name === 'cvv')        formatted = value.replace(/\D/g, '').slice(0, 4);
+    if (name === 'expiry') formatted = formatExpiry(value);
+    if (name === 'cvv') formatted = value.replace(/\D/g, '').slice(0, 4);
     setPayment((p) => ({ ...p, [name]: formatted }));
     setErrors((p) => ({ ...p, [name]: '' }));
   };
 
   const validate = () => {
     const errs = {};
-    if (!payment.name.trim())                              errs.name = 'Cardholder name is required.';
+    if (!payment.name.trim()) errs.name = 'Cardholder name is required.';
     if (payment.cardNumber.replace(/\s/g, '').length < 16) errs.cardNumber = 'Enter a valid 16-digit card number.';
-    if (!/^\d{2}\/\d{2}$/.test(payment.expiry))            errs.expiry = 'Enter expiry as MM/YY.';
-    if (payment.cvv.length < 3)                            errs.cvv = 'CVV must be 3–4 digits.';
+    if (!/^\d{2}\/\d{2}$/.test(payment.expiry)) errs.expiry = 'Enter expiry as MM/YY.';
+    if (payment.cvv.length < 3) errs.cvv = 'CVV must be 3–4 digits.';
     return errs;
   };
 
@@ -198,7 +202,7 @@ export default function Checkout() {
     setLoading(true);
     try {
       const { data } = await api.post('/bookings', {
-        routeId:     selectedRoute._id,
+        routeId: selectedRoute._id,
         seatNumbers: selectedSeats.map((s) => s.seatNumber),
       });
       if (data.success) {
@@ -225,7 +229,6 @@ export default function Checkout() {
               <CardTitle className="text-base flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-primary" />
                 Payment Details
-                <span className="ml-auto text-xs text-muted-foreground font-normal">(Demo — no real charge)</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -307,7 +310,7 @@ export default function Checkout() {
 
                 <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
                   <Lock className="w-3 h-3" />
-                  256-bit SSL encrypted · Demo mode
+                  256-bit SSL encrypted
                 </div>
               </form>
             </CardContent>
@@ -320,6 +323,8 @@ export default function Checkout() {
             route={selectedRoute}
             selectedSeats={selectedSeats}
             totalPrice={totalPrice}
+            lockExpiresAt={lockExpiresAt}
+            onLockExpire={handleLockExpire}
           />
         </div>
       </div>

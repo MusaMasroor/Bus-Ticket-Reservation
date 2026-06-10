@@ -11,8 +11,11 @@ const useBookingStore = create((set, get) => ({
   selectedRoute: null,
   selectedSeats: [],
   totalPrice: 0,
+  lockExpiresAt: null,
 
-  setRoute: (route) => set({ selectedRoute: route, selectedSeats: [], totalPrice: 0 }),
+  setRoute: (route) => set({ selectedRoute: route, selectedSeats: [], totalPrice: 0, lockExpiresAt: null }),
+
+  setLockExpiry: (expiresAt) => set({ lockExpiresAt: expiresAt }),
 
   toggleSeat: (seat) => {
     const { selectedSeats, selectedRoute } = get();
@@ -27,7 +30,7 @@ const useBookingStore = create((set, get) => ({
     set({ selectedSeats: updated, totalPrice: Math.round(total * 100) / 100 });
   },
 
-  clearBooking: () => set({ selectedRoute: null, selectedSeats: [], totalPrice: 0 }),
+  clearBooking: () => set({ selectedRoute: null, selectedSeats: [], totalPrice: 0, lockExpiresAt: null }),
 }));
 
 export default useBookingStore;

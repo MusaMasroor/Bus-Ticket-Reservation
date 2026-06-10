@@ -1,5 +1,6 @@
 import { body } from 'express-validator';
 import Bus from '../models/Bus.js';
+import Route from '../models/Route.js';
 import validate from '../middleware/validationMiddleware.js';
 
 // ── Validation Rules ──────────────────────────────────────────────────────────
@@ -40,6 +41,14 @@ export const getBuses = async (req, res, next) => {
 
 export const createBus = async (req, res, next) => {
   try {
+    // Validate totalSeats matches the actual seat layout count
+    if (req.body.seatLayout?.seats && req.body.totalSeats !== req.body.seatLayout.seats.length) {
+      return res.status(400).json({
+        success: false,
+        message: `totalSeats (${req.body.totalSeats}) does not match seat layout count (${req.body.seatLayout.seats.length}).`,
+      });
+    }
+
     const bus = await Bus.create(req.body);
     res.status(201).json({ success: true, data: bus });
   } catch (err) {
@@ -49,6 +58,14 @@ export const createBus = async (req, res, next) => {
 
 export const updateBus = async (req, res, next) => {
   try {
+    // Validate totalSeats matches the actual seat layout count
+    if (req.body.seatLayout?.seats && req.body.totalSeats !== req.body.seatLayout.seats.length) {
+      return res.status(400).json({
+        success: false,
+        message: `totalSeats (${req.body.totalSeats}) does not match seat layout count (${req.body.seatLayout.seats.length}).`,
+      });
+    }
+
     const bus = await Bus.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
@@ -62,8 +79,19 @@ export const updateBus = async (req, res, next) => {
 
 export const deleteBus = async (req, res, next) => {
   try {
-    const bus = await Bus.findByIdAndDelete(req.params.id);
+    const bus = await Bus.findById(req.params.id);
     if (!bus) return res.status(404).json({ success: false, message: 'Bus not found.' });
+
+    // Prevent deletion if active routes reference this bus
+    const activeRouteCount = await Route.countDocuments({ busId: bus._id, status: 'active' });
+    if (activeRouteCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Cannot delete bus — ${activeRouteCount} active route(s) still reference it. Cancel or delete those routes first.`,
+      });
+    }
+
+    await bus.deleteOne();
     res.json({ success: true, message: 'Bus deleted successfully.' });
   } catch (err) {
     next(err);

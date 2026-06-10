@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom';
 import { Bus } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import useAuthStore from '@/store/authStore';
 
 export default function Footer() {
-  const year = new Date().getFullYear();
+  const year  = new Date().getFullYear();
+  const token = useAuthStore((s) => s.token);
+
   return (
     <footer className="border-t bg-muted/30 mt-auto">
       <div className="container py-8">
@@ -13,10 +16,14 @@ export default function Footer() {
             <span>BusGo</span>
           </Link>
           <nav className="flex items-center gap-6 text-sm text-muted-foreground">
-            <Link to="/"        className="hover:text-foreground transition-colors">Home</Link>
-            <Link to="/search"  className="hover:text-foreground transition-colors">Search</Link>
-            <Link to="/login"   className="hover:text-foreground transition-colors">Log in</Link>
-            <Link to="/register" className="hover:text-foreground transition-colors">Register</Link>
+            <Link to="/"       className="hover:text-foreground transition-colors">Home</Link>
+            <Link to="/search" className="hover:text-foreground transition-colors">Search</Link>
+            {!token && (
+              <>
+                <Link to="/login"    className="hover:text-foreground transition-colors">Log in</Link>
+                <Link to="/register" className="hover:text-foreground transition-colors">Register</Link>
+              </>
+            )}
           </nav>
         </div>
         <Separator className="my-4" />

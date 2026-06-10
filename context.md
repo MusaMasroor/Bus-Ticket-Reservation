@@ -35,13 +35,20 @@ bus-ticket-reservation-system/               ← monorepo root
 │   │   ├── busController.js                 ← admin CRUD for buses
 │   │   ├── routeController.js               ← admin CRUD for routes + search
 │   │   ├── seatController.js                ← seat layout, lock/unlock
-│   │   └── bookingController.js             ← create, list, cancel bookings
+│   │   ├── bookingController.js             ← create, list, cancel bookings + admin stats
+│   │   └── recommendationController.js      ← smart hybrid recommendation engine
 │   ├── routes/
 │   │   ├── authRoutes.js
 │   │   ├── busRoutes.js
 │   │   ├── routeRoutes.js
 │   │   ├── seatRoutes.js
-│   │   └── bookingRoutes.js
+│   │   ├── bookingRoutes.js
+│   │   ├── adminRoutes.js                   ← /admin/bookings, /admin/stats
+│   │   └── recommendationRoutes.js          ← GET /recommendations (optionalAuth)
+│   ├── scripts/
+│   │   ├── seed.js                          ← basic seed (buses, routes, sample bookings)
+│   │   ├── seedRecommendationData.js        ← demo user + 18 future routes + 63 bookings
+│   │   └── makeAdmin.js                     ← promote/create an admin (only path to admin)
 │   └── utils/
 │       ├── generateToken.js                 ← JWT sign helper
 │       └── seatPricing.js                   ← window seat premium logic
@@ -67,16 +74,16 @@ bus-ticket-reservation-system/               ← monorepo root
         │   └── bookingStore.js              ← Zustand: route, seats, price
         ├── components/
         │   ├── layout/
-        │   │   ├── Navbar.jsx               ← responsive, auth-aware
+        │   │   ├── Navbar.jsx               ← responsive, auth-aware (+ ThemeToggle)
         │   │   ├── Footer.jsx
         │   │   ├── ProtectedRoute.jsx       ← redirects guests → /login
         │   │   └── AdminRoute.jsx           ← redirects non-admins → /
         │   ├── ui/                          ← Shadcn/UI generated components
-        │   └── shared/
-        │       ├── SeatGrid.jsx             ← visual bus seat layout
-        │       ├── RouteCard.jsx            ← search result card
-        │       ├── BookingCard.jsx          ← dashboard booking card
-        │       └── PdfTicket.jsx            ← PDF generation trigger
+        │   ├── ThemeToggle.jsx              ← dark/light mode toggle (persisted)
+        │   ├── CountdownTimer.jsx           ← 10-min seat-lock countdown (Checkout)
+        │   ├── ErrorBoundary.jsx            ← top-level React error boundary
+        │   ├── RecommendationsSection.jsx   ← fetches/renders recommendations on Home
+        │   └── RecommendationCard.jsx       ← single recommendation card (badges/reasons)
         ├── pages/
         │   ├── Home.jsx                     ← hero + search form
         │   ├── SearchResults.jsx            ← filtered route listing
@@ -93,7 +100,9 @@ bus-ticket-reservation-system/               ← monorepo root
         │       └── AdminBookings.jsx        ← view all bookings
         └── utils/
             ├── formatters.js               ← date/currency formatters
-            └── seatHelpers.js              ← seat color/status logic
+            ├── seatHelpers.js              ← seat color/status logic
+            ├── generateTicket.js           ← jsPDF ticket generator
+            └── exportCsv.js                ← CSV export (admin tables)
 ```
 
 ---
@@ -120,6 +129,7 @@ Base URL: `http://localhost:5000/api`
 | POST   | `/bookings`                   | JWT           | Validate seat availability, create booking                                          |
 | GET    | `/bookings/my`                | JWT           | Return paginated list of current user's bookings                                    |
 | PUT    | `/bookings/:id/cancel`        | JWT           | Cancel booking if status=confirmed and departure hasn't passed                      |
+| GET    | `/recommendations`            | Optional      | Smart hybrid recommendations. Anonymous → popularity/urgency/availability; logged-in → adds personal-affinity signal. Returns scored routes with badges + reasons |
 
 ### Admin APIs — `/api/admin` (JWT + Admin role required on all)
 
@@ -271,13 +281,13 @@ Manages the in-progress booking flow across pages.
 
 | Package               | Version  | Purpose                                                       |
 |-----------------------|----------|---------------------------------------------------------------|
-| `express`             | ^4.18    | HTTP server and routing framework                             |
-| `mongoose`            | ^8.x     | MongoDB ODM — schemas, models, queries                        |
-| `dotenv`              | ^16.x    | Load environment variables from `.env`                        |
+| `express`             | ^5.2     | HTTP server and routing framework                             |
+| `mongoose`            | ^9.x     | MongoDB ODM — schemas, models, queries                        |
+| `dotenv`              | ^17.x    | Load environment variables from `.env`                        |
 | `cors`                | ^2.x     | Cross-Origin Resource Sharing configuration                   |
-| `helmet`              | ^7.x     | HTTP security headers                                         |
-| `express-rate-limit`  | ^7.x     | Rate limiting to prevent brute-force/DoS                      |
-| `bcryptjs`            | ^2.x     | Password hashing (bcrypt algorithm)                           |
+| `helmet`              | ^8.x     | HTTP security headers                                         |
+| `express-rate-limit`  | ^8.x     | Rate limiting to prevent brute-force/DoS                      |
+| `bcryptjs`            | ^3.x     | Password hashing (bcrypt algorithm)                           |
 | `jsonwebtoken`        | ^9.x     | JWT generation and verification                               |
 | `express-validator`   | ^7.x     | Request body/query input validation                           |
 
@@ -287,13 +297,13 @@ Manages the in-progress booking flow across pages.
 |-----------------------|----------|---------------------------------------------------------------|
 | `react`               | ^18.x    | UI library                                                    |
 | `react-dom`           | ^18.x    | React DOM renderer                                            |
-| `vite`                | ^5.x     | Build tool and dev server                                     |
+| `vite`                | ^6.x     | Build tool and dev server                                     |
 | `react-router-dom`    | ^6.x     | Client-side routing                                           |
 | `tailwindcss`         | ^3.x     | Utility-first CSS framework                                   |
 | `@shadcn/ui`          | latest   | Accessible, styled component library built on Radix UI        |
 | `lucide-react`        | latest   | Icon library (consistent with Shadcn/UI)                      |
 | `axios`               | ^1.x     | HTTP client with interceptors                                 |
-| `zustand`             | ^4.x     | Minimal state management                                      |
+| `zustand`             | ^5.x     | Minimal state management                                      |
 | `jspdf`               | ^2.x     | Client-side PDF ticket generation                             |
 | `jspdf-autotable`     | ^3.x     | Table plugin for jsPDF (used in ticket layout)                |
 | `recharts`            | ^2.x     | Chart library for admin dashboard (bookings/revenue graphs)   |

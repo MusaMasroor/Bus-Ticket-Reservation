@@ -84,8 +84,19 @@ export const updateRoute = async (req, res, next) => {
 
 export const deleteRoute = async (req, res, next) => {
   try {
-    const route = await Route.findByIdAndDelete(req.params.id);
+    const route = await Route.findById(req.params.id);
     if (!route) return res.status(404).json({ success: false, message: 'Route not found.' });
+
+    // Prevent deletion if confirmed bookings exist for this route
+    const confirmedCount = await Booking.countDocuments({ routeId: route._id, status: 'confirmed' });
+    if (confirmedCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Cannot delete route — ${confirmedCount} confirmed booking(s) exist. Cancel those bookings first.`,
+      });
+    }
+
+    await route.deleteOne();
     res.json({ success: true, message: 'Route deleted successfully.' });
   } catch (err) {
     next(err);
@@ -93,10 +104,33 @@ export const deleteRoute = async (req, res, next) => {
 };
 
 // ── Public: Search ────────────────────────────────────────────────────────────
+//
+// SCALABILITY NOTE (for production deployment):
+// ─────────────────────────────────────────────
+// This endpoint is the most query-intensive in the system. In production:
+//  1. CACHING — Popular route queries (e.g., "Karachi → Lahore on 2025-03-15")
+//     should be cached in Redis with a short TTL (60–120s). Cache key =
+//     `search:${source}:${dest}:${date}:${sort}:${type}`. Invalidate on
+//     new booking or route update via pub/sub.
+//  2. PAGINATION — Currently returns all matching routes. Add limit/skip or
+//     cursor-based pagination once route count exceeds ~500.
+//  3. AGGREGATION PIPELINE — The two-step query (find routes, then aggregate
+//     bookings) could be combined into a single aggregation pipeline using
+//     $lookup for better performance at scale.
+//  4. READ REPLICAS — Route searches are read-heavy; direct them to MongoDB
+//     secondaries via { readPreference: 'secondaryPreferred' }.
 
 export const searchRoutes = async (req, res, next) => {
   try {
     const { source, destination, date, type, minPrice, maxPrice, departureAfter, departureBefore, sort } = req.query;
+
+    // Reject past-date searches (compare YYYY-MM-DD strings — timezone-safe)
+    if (date) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (date < todayStr) {
+        return res.status(400).json({ success: false, message: 'Search date cannot be in the past.' });
+      }
+    }
 
     const filter = { status: 'active' };
 

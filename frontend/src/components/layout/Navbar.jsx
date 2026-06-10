@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import useAuthStore from '@/store/authStore';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const NAV_LINKS = [
   { to: '/',       label: 'Home' },
@@ -70,6 +71,7 @@ export default function Navbar() {
 
         {/* ── Right Side ───────────────────────────────── */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           {token && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
