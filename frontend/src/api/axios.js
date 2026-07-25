@@ -1,12 +1,12 @@
-import axios from 'axios';
+import axios from "axios";
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
 });
 
 // Attach token to every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('busgo_token');
+  const token = localStorage.getItem("busgo_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -18,14 +18,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('busgo_token');
-      localStorage.removeItem('busgo_user');
+      localStorage.removeItem("busgo_token");
+      localStorage.removeItem("busgo_user");
       // Avoid import cycle — dispatch a custom event instead of calling store directly
-      window.dispatchEvent(new Event('auth:logout'));
-      window.location.href = '/login';
+      window.dispatchEvent(new Event("auth:logout"));
+      window.location.href = "/login";
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
